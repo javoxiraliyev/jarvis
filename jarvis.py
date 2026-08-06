@@ -286,7 +286,7 @@ def ask_gemini(system_prompt, user_input_content):
     from google import genai
     from google.genai import types
     
-    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash']
+    models_to_try = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash']
     last_err = None
     
     for model_name in models_to_try:
@@ -552,7 +552,7 @@ with tab_voice:
         document.getElementById('status-text').innerText = "Jarvis o'ylamoqda...";
         document.getElementById('jarvis-orb').className = 'orb thinking';
         
-        fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {{
+        fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey, {{
             method: 'POST',
             headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify({{
