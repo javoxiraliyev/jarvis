@@ -359,7 +359,7 @@ tab_voice, tab_chat, tab_meta, tab_sales, tab_samuylari, tab_books, tab_ingest, 
 # 1. VOICE CONVERSATION TAB
 with tab_voice:
     st.markdown("### 🎙️ Jarvis Bilan Ovozli Muloqot (Voice Copilot)")
-    st.write("Quyida mikrofondan foydalanib Jarvisga ovozli xabar yo'llang. Jarvis ovozingizni tushunadi va o'zbek tilida o'zi baland ovozda javob qaytaradi!")
+    st.info("💡 **Ovozli gapirish tartibi:**\n1. Pastdagi 🔴 **Mikrofon** tugmasini bosing va savolingizni ayting.\n2. Gapirib bo'lgach, ⏹️ **To'xtatish** tugmasini bosing.\n3. Jarvis javobni tahlil qilib, **o'zi baland ovozda o'zbekcha gapiradi!** 🔊")
     
     st.markdown("<div class='mic-box'>", unsafe_allow_html=True)
     audio_val = st.audio_input("🔴 Ovozli xabarni yozib olish uchun bu tugmani bosing:")
@@ -647,10 +647,10 @@ with tab_chat:
         st.markdown(f"<div class='chat-bubble-jarvis'><b>Jarvis:</b><br>{response}</div>", unsafe_allow_html=True)
         st.session_state.chat_history.append({"role": "assistant", "content": response})
         
-        if st.session_state.voice_output_enabled:
-            mp3_bytes = text_to_speech_mp3(response)
-            if mp3_bytes:
-                autoplay_audio(mp3_bytes)
+        # Always generate and play Uzbek voice audio
+        mp3_bytes = text_to_speech_mp3(response)
+        if mp3_bytes:
+            autoplay_audio(mp3_bytes)
         st.rerun()
 
 # 3. META ADS STUDIO
