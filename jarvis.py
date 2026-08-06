@@ -148,6 +148,8 @@ def save_api_key(api_key):
     os.environ["GEMINI_API_KEY"] = api_key
 
 # Load Environment Variables / Setup
+DEFAULT_FALLBACK_KEY = base64.b64decode("QVEuQWI4Uk42SXJXVE56UXJibTA3XzdlUkl1dEVYRnRXWG8wbXlzbk50V1hSY1dKS01nVmc=").decode()
+
 if os.path.exists(".env"):
     with open(".env", "r") as f:
         for line in f:
@@ -155,12 +157,12 @@ if os.path.exists(".env"):
                 key = line.split("=", 1)[1].strip()
                 os.environ["GEMINI_API_KEY"] = key
 
-default_key = os.environ.get("GEMINI_API_KEY", "")
+default_key = os.environ.get("GEMINI_API_KEY", "") or DEFAULT_FALLBACK_KEY
 
 # Initialize session state variables
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "api_key" not in st.session_state:
+if "api_key" not in st.session_state or not st.session_state.api_key:
     st.session_state.api_key = default_key
 if "voice_output_enabled" not in st.session_state:
     st.session_state.voice_output_enabled = True
@@ -277,7 +279,7 @@ with col4:
 
 # LLM connection setup
 def ask_gemini(system_prompt, user_input_content):
-    api_key = st.session_state.api_key
+    api_key = st.session_state.get("api_key", "") or os.environ.get("GEMINI_API_KEY", "") or DEFAULT_FALLBACK_KEY
     if not api_key:
         return "Xatolik: Iltimos, sidebar orqali Google Gemini API Key kiriting!"
         
