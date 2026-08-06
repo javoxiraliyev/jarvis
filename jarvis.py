@@ -2,6 +2,7 @@ import os
 import re
 import io
 import glob
+import base64
 from datetime import datetime
 import streamlit as st
 import markdown
@@ -283,7 +284,7 @@ def ask_gemini(system_prompt, user_input_content):
     from google import genai
     from google.genai import types
     
-    models_to_try = ['gemini-3.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']
+    models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash']
     last_err = None
     
     for model_name in models_to_try:
@@ -306,15 +307,40 @@ def ask_gemini(system_prompt, user_input_content):
 # Helper: Convert Text to Uzbek Audio MP3
 def text_to_speech_mp3(text):
     clean_text = re.sub(r'[*#_`~>\[\]\(\)]', '', text) # Strip markdown syntax
-    clean_text = clean_text[:600] # Limit length for smooth TTS
+    clean_text = clean_text[:600].strip() # Limit length for smooth TTS
+    if not clean_text:
+        return None
     try:
         tts = gTTS(text=clean_text, lang='uz', slow=False)
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         fp.seek(0)
         return fp.read()
-    except Exception as e:
-        return None
+    except Exception:
+        try:
+            # Fallback language if uz TTS service has temporary delay
+            tts = gTTS(text=clean_text, lang='ru', slow=False)
+            fp = io.BytesIO()
+            tts.write_to_fp(fp)
+            fp.seek(0)
+            return fp.read()
+        except Exception:
+            return None
+
+# Helper: Auto-play HTML5 Audio Player
+def autoplay_audio(mp3_bytes):
+    if mp3_bytes:
+        b64 = base64.b64encode(mp3_bytes).decode()
+        audio_html = f"""
+            <div style="margin-top: 10px; margin-bottom: 10px;">
+                <p style="color: #38bdf8; font-size: 0.9rem; margin-bottom: 4px;">🔊 <b>Jarvis Ovozli Javobi:</b></p>
+                <audio autoplay controls style="width: 100%; border-radius: 8px;">
+                    <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+                    Brauzeringiz audioni qo'llab-quvvatlamaydi.
+                </audio>
+            </div>
+        """
+        st.markdown(audio_html, unsafe_allow_html=True)
 
 # TABS SETUP
 tab_voice, tab_chat, tab_meta, tab_sales, tab_samuylari, tab_books, tab_ingest, tab_explorer = st.tabs([
@@ -330,8 +356,35 @@ tab_voice, tab_chat, tab_meta, tab_sales, tab_samuylari, tab_books, tab_ingest, 
 
 # 1. VOICE CONVERSATION TAB
 with tab_voice:
-    st.markdown("### 🎙️ Jarvis Bilan Jonli Ovozli Suhbat (Real-Time Voice Call)")
-    st.write("Pastdagi tugmani bosing va Jarvis bilan to'g'ridan-to'g'ri og'zaki muloqot qiling! Jarvis sizni eshitadi va javob qaytarib, yana keyingi gappingizni avtomatik eshitadi.")
+    st.markdown("### 🎙️ Jarvis Bilan Ovozli Muloqot (Voice Copilot)")
+    st.write("Quyida mikrofondan foydalanib Jarvisga ovozli xabar yo'llang. Jarvis ovozingizni tushunadi va o'zbek tilida o'zi baland ovozda javob qaytaradi!")
+    
+    st.markdown("<div class='mic-box'>", unsafe_allow_html=True)
+    audio_val = st.audio_input("🔴 Ovozli xabarni yozib olish uchun bu tugmani bosing:")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    if audio_val is not None:
+        audio_bytes = audio_val.read()
+        mime_type = getattr(audio_val, "type", "audio/wav") or "audio/wav"
+        if not mime_type:
+            mime_type = "audio/wav"
+            
+        from google.genai import types
+        user_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+        prompt_content = [user_part, "Ushbu ovozli xabarga munosib va samimiy javob ber. Javob faqat O'zbek tilida va qisqa (1-3 jumla) bo'lsin."]
+        system_prompt = f"{USER_PROFILE}\nSiz Ovozli Jarvis AI copilotisiz. Javobingizni tushunarli va ravon O'zbek tilida bering."
+        
+        with st.spinner("Jarvis ovozingizni tinglab, javob tayyorlamoqda..."):
+            response_text = ask_gemini(system_prompt, prompt_content)
+            
+        st.markdown(f"<div class='chat-bubble-jarvis'><b>🎙️ Jarvis (Ovozli):</b><br>{response_text}</div>", unsafe_allow_html=True)
+        
+        mp3_bytes = text_to_speech_mp3(response_text)
+        if mp3_bytes:
+            autoplay_audio(mp3_bytes)
+            
+    st.markdown("---")
+    st.markdown("#### 💬 Hands-Free Jonli Telefon Muloqoti (Web Speech Call Mode)")
     
     current_api_key = st.session_state.api_key
     voice_call_html = f"""
@@ -351,19 +404,19 @@ with tab_voice:
         background: rgba(30, 41, 59, 0.6);
         border: 1px solid rgba(129, 140, 248, 0.3);
         border-radius: 20px;
-        padding: 30px;
+        padding: 24px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }}
     .orb-box {{
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 140px;
+        height: 120px;
         margin-bottom: 15px;
     }}
     .orb {{
-        width: 100px;
-        height: 100px;
+        width: 90px;
+        height: 90px;
         border-radius: 50%;
         background: radial-gradient(circle, #818cf8 0%, #4f46e5 60%, #1e1b4b 100%);
         box-shadow: 0 0 20px #818cf8;
@@ -393,41 +446,36 @@ with tab_voice:
         100% {{ transform: rotate(360deg) scale(1.05); }}
     }}
     .status-lbl {{
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         font-weight: 600;
         color: #cbd5e1;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }}
     .btn {{
         background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
         color: white;
         border: none;
-        padding: 14px 32px;
-        font-size: 1.1rem;
+        padding: 12px 28px;
+        font-size: 1rem;
         font-weight: 700;
         border-radius: 12px;
         cursor: pointer;
         box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
         transition: all 0.2s ease;
     }}
-    .btn:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.6);
-    }}
     .btn-stop {{
         background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
-        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
     }}
     .transcript-box {{
-        margin-top: 25px;
+        margin-top: 20px;
         background: rgba(15, 23, 42, 0.5);
         border-radius: 12px;
-        padding: 16px;
+        padding: 14px;
         text-align: left;
-        font-size: 1rem;
+        font-size: 0.95rem;
         border: 1px solid rgba(255,255,255,0.05);
     }}
-    .user-msg {{ color: #a5b4fc; margin-bottom: 8px; }}
+    .user-msg {{ color: #a5b4fc; margin-bottom: 6px; }}
     .jarvis-msg {{ color: #38bdf8; font-weight: 500; }}
     </style>
     </head>
@@ -437,10 +485,10 @@ with tab_voice:
         <div class="orb-box">
             <div id="jarvis-orb" class="orb"></div>
         </div>
-        <div id="status-text" class="status-lbl">Ovozli muloqotni boshlash uchun quyidagi tugmani bosing</div>
+        <div id="status-text" class="status-lbl">Jonli muloqot rejimini faollashtirish uchun bosing</div>
         
-        <button id="start-btn" class="btn" onclick="startCall()">🎙️ Ovozli Muloqotni Boshlash (Start Call)</button>
-        <button id="stop-btn" class="btn btn-stop" onclick="stopCall()" style="display:none;">⏹️ Muloqotni Yakunlash (End Call)</button>
+        <button id="start-btn" class="btn" onclick="startCall()">📞 Jonli Qo'ng'iroqni Boshlash (Live Call)</button>
+        <button id="stop-btn" class="btn btn-stop" onclick="stopCall()" style="display:none;">⏹️ Qo'ng'iroqni Yakunlash</button>
         
         <div class="transcript-box">
             <div class="user-msg"><b>Siz:</b> <span id="user-text">...</span></div>
@@ -456,40 +504,46 @@ with tab_voice:
     let isCallActive = false;
 
     function startCall() {{
-        isCallActive = true;
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('stop-btn').style.display = 'inline-block';
-        
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {{
-            alert("Brauzeringizda mikrofondan ovoz tanib olish moduli yo'q. Chrome yoki Edge ishlatishingizni so'raymiz.");
-            return;
-        }}
-        
-        recognition = new SpeechRecognition();
-        recognition.lang = 'uz-UZ';
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        
-        recognition.onstart = function() {{
-            document.getElementById('status-text').innerText = "Sizni eshitmoqdaman... (Gapiring)";
-            document.getElementById('jarvis-orb').className = 'orb listening';
-        }};
-        
-        recognition.onresult = function(event) {{
-            const text = event.results[0][0].transcript;
-            document.getElementById('user-text').innerText = text;
-            fetchGeminiReply(text);
-        }};
-        
-        recognition.onerror = function(event) {{
-            console.log("Mic error:", event.error);
-            if (isCallActive) {{
-                setTimeout(() => {{ try {{ recognition.start(); }} catch(e) {{}} }}, 1500);
+        navigator.mediaDevices.getUserMedia({{ audio: true }})
+        .then(stream => {{
+            isCallActive = true;
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('stop-btn').style.display = 'inline-block';
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {{
+                alert("Brauzeringizda mikrofondan ovoz tanib olish moduli yo'q. Chrome yoki Edge ishlatishingizni so'raymiz.");
+                return;
             }}
-        }};
-        
-        try {{ recognition.start(); }} catch(e) {{}}
+            
+            recognition = new SpeechRecognition();
+            recognition.lang = 'uz-UZ';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            
+            recognition.onstart = function() {{
+                document.getElementById('status-text').innerText = "Sizni eshitmoqdaman... (Gapiring)";
+                document.getElementById('jarvis-orb').className = 'orb listening';
+            }};
+            
+            recognition.onresult = function(event) {{
+                const text = event.results[0][0].transcript;
+                document.getElementById('user-text').innerText = text;
+                fetchGeminiReply(text);
+            }};
+            
+            recognition.onerror = function(event) {{
+                console.log("Mic error:", event.error);
+                if (isCallActive) {{
+                    setTimeout(() => {{ try {{ recognition.start(); }} catch(e) {{}} }}, 1500);
+                }}
+            }};
+            
+            try {{ recognition.start(); }} catch(e) {{}}
+        }})
+        .catch(err => {{
+            alert("Mikrofon ruxsati berilmadi. Iltimos, brauzeringizda mikrofon uchun ruxsat bering!");
+        }});
     }}
 
     function fetchGeminiReply(userText) {{
@@ -523,31 +577,24 @@ with tab_voice:
         document.getElementById('status-text').innerText = "Jarvis gapirmoqda...";
         document.getElementById('jarvis-orb').className = 'orb speaking';
         
-        const audioUrl = "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=uz&q=" + encodeURIComponent(text.substring(0, 200));
-        const audio = new Audio(audioUrl);
-        
-        audio.onended = function() {{
+        let ut = new SpeechSynthesisUtterance(text);
+        ut.lang = 'uz-UZ';
+        ut.rate = 0.95;
+        ut.onend = function() {{
             if (isCallActive) {{
                 document.getElementById('status-text').innerText = "Sizni eshitmoqdaman... (Gapiring)";
                 document.getElementById('jarvis-orb').className = 'orb listening';
                 try {{ recognition.start(); }} catch(e) {{}}
             }}
         }};
-        
-        audio.onerror = function() {{
-            let ut = new SpeechSynthesisUtterance(text);
-            ut.lang = 'uz-UZ';
-            ut.onend = function() {{
-                if (isCallActive) {{
-                    document.getElementById('status-text').innerText = "Sizni eshitmoqdaman... (Gapiring)";
-                    document.getElementById('jarvis-orb').className = 'orb listening';
-                    try {{ recognition.start(); }} catch(e) {{}}
-                }}
-            }};
-            window.speechSynthesis.speak(ut);
+        ut.onerror = function() {{
+            if (isCallActive) {{
+                document.getElementById('status-text').innerText = "Sizni eshitmoqdaman... (Gapiring)";
+                document.getElementById('jarvis-orb').className = 'orb listening';
+                try {{ recognition.start(); }} catch(e) {{}}
+            }}
         }};
-        
-        audio.play();
+        window.speechSynthesis.speak(ut);
     }}
 
     function stopCall() {{
@@ -565,23 +612,7 @@ with tab_voice:
     """
     
     import streamlit.components.v1 as components
-    components.html(voice_call_html, height=480)
-    
-    st.markdown("---")
-    st.markdown("#### 🎙️ Ovozli Yozuvchi (Muqobil variant)")
-    audio_val = st.audio_input("Agar jonli muloqot tugmasi ishlamasa, ushbu yozuvchidan foydalaning:")
-    if audio_val is not None:
-        audio_bytes = audio_val.read()
-        from google.genai import types
-        user_part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
-        prompt_content = [user_part, "Ushbu ovozli xabarga munosib javob ber. Javob faqat O'zbek tilida bo'lsin."]
-        system_prompt = f"{USER_PROFILE}\nSiz Ovozli Jarvis AI copilotisiz. Javobingizni tushunarli va ravon O'zbek tilida bering."
-        with st.spinner("Jarvis eshitmoqda..."):
-            response_text = ask_gemini(system_prompt, prompt_content)
-        st.markdown(f"<div class='chat-bubble-jarvis'><b>Jarvis (Ovozli):</b><br>{response_text}</div>", unsafe_allow_html=True)
-        mp3_bytes = text_to_speech_mp3(response_text)
-        if mp3_bytes:
-            st.audio(mp3_bytes, format="audio/mp3", autoplay=True)
+    components.html(voice_call_html, height=450)
 
 # 2. CHAT TAB
 with tab_chat:
@@ -617,7 +648,7 @@ with tab_chat:
         if st.session_state.voice_output_enabled:
             mp3_bytes = text_to_speech_mp3(response)
             if mp3_bytes:
-                st.audio(mp3_bytes, format="audio/mp3", autoplay=True)
+                autoplay_audio(mp3_bytes)
         st.rerun()
 
 # 3. META ADS STUDIO
